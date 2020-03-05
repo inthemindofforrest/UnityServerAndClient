@@ -163,18 +163,55 @@ public class Client : MonoBehaviour
     {
         Net_CreateAccount CA = new Net_CreateAccount();
 
+        if(!Utility.IsUsername(_Username))
+        {
+            //Invalid Username
+            LobbyScene.Instance.ChangeAuthenticationMessage("Username is Invalid");
+            LobbyScene.Instance.EnableInputs();
+            return;
+        }
+        if (!Utility.IsEmail(_Email))
+        {
+            //Invalid Email
+            LobbyScene.Instance.ChangeAuthenticationMessage("Email is Invalid");
+            LobbyScene.Instance.EnableInputs();
+            return;
+        }
+        if (_Password == null || _Password == "")
+        {
+            //Invalid Password
+            LobbyScene.Instance.ChangeAuthenticationMessage("Password is Empty");
+            LobbyScene.Instance.EnableInputs();
+            return;
+        }
+
         CA.Username = _Username;
-        CA.Password = _Password;
+        CA.Password = Utility.Sha256FromString(_Password);
         CA.Email = _Email;
+        LobbyScene.Instance.ChangeAuthenticationMessage("Sending Request...");
 
         SendServer(CA);
     }
     public void SendLoginRequest(string _UsernameOrEmail, string _Password)
     {
+        if (!Utility.IsUsernameAndDiscriminator(_UsernameOrEmail) && !Utility.IsEmail(_UsernameOrEmail))
+        {
+            //Invalid Username
+            LobbyScene.Instance.ChangeAuthenticationMessage("Username or email is Invalid");
+            LobbyScene.Instance.EnableInputs();
+            return;
+        }
+        if (_Password == null || _Password == "")
+        {
+            //Invalid Password
+            LobbyScene.Instance.ChangeAuthenticationMessage("Password is Empty");
+            LobbyScene.Instance.EnableInputs();
+            return;
+        }
         Net_LoginRequest LR = new Net_LoginRequest();
 
         LR.UsernameOrEmail = _UsernameOrEmail;
-        LR.Password = _Password;
+        LR.Password = Utility.Sha256FromString(_Password);
 
         SendServer(LR);
     }

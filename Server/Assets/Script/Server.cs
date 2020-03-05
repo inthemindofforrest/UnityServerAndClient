@@ -49,9 +49,6 @@ public class Server : MonoBehaviour
 
         Debug.Log(string.Format("Opening connection on port {0} and webport {1}", PORT, WEB_PORT));
         IsServerStarted = true;
-
-        //Test
-        DB.InsertAccount("Bambooze", "Magnificent", "Email@Ema.com");
     }
     public void Shutdown()
     {
@@ -119,9 +116,16 @@ public class Server : MonoBehaviour
 
     private void CreateAccount(int _CnnID, int _ChannelID, int _RecHostID, Net_CreateAccount _CA)
     {
-        Debug.Log(string.Format("{0},{1},{2}", _CA.Username, _CA.Password, _CA.Email));
-
         Net_OnCreateAccount OCA = new Net_OnCreateAccount();
+
+        if(DB.InsertAccount(_CA.Username, _CA.Password, _CA.Email))
+        {
+            OCA.Success = 1;
+        }
+        else
+        {
+            OCA.Success = 0;
+        }
 
         OCA.Success = 0;
 
@@ -129,13 +133,23 @@ public class Server : MonoBehaviour
     }
     private void LoginRequest(int _CnnID, int _ChannelID, int _RecHostID, Net_LoginRequest _LR)
     {
-        Debug.Log(string.Format("{0},{1}", _LR.UsernameOrEmail, _LR.Password));
+        string randomToken = Utility.GenerateRandom(64);
+        Model_Account account = DB.LoginAccount(_LR.UsernameOrEmail, _LR.Password, _CnnID, randomToken);
         Net_OnLoginRequest OLR = new Net_OnLoginRequest();
 
-        OLR.Success = 0;
-        OLR.Username = "User";
-        OLR.Discriminator = "0000";
-        OLR.Token = "TOKEN";
+        if(account != null)
+        {
+            OLR.Success = 1;
+            OLR.Username = account.Username;
+            OLR.Discriminator = account.Discriminator;
+            OLR.Token = randomToken;
+            OLR.ConnectionID = _CnnID;
+        }
+        else
+        {
+            OLR.Success = 0;
+        }
+        
 
         SendClient(_RecHostID, _CnnID, OLR);
     }

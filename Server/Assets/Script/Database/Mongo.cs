@@ -1,7 +1,6 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Collections.Generic;
-using MongoDB.Driver.Builders;
 using UnityEngine;
 
 public class Mongo
@@ -39,6 +38,7 @@ public class Mongo
     public Model_Account FindAccountByUsernameAndDiscriminator(string _Username, string _Discriminator)
     {
         var filter = Builders<Model_Account>.Filter.Eq("Username", _Username);
+        filter = (filter & Builders<Model_Account>.Filter.Eq("Discriminator", _Discriminator));
         return accounts.Find(filter).FirstOrDefault();
     }
     #endregion
@@ -71,18 +71,18 @@ public class Mongo
         NewAccount.Discriminator = "0000";
 
         //Roll for unique Discriminator
-        //int rollCount = 0;
-        //while(FindAccount(NewAccount,_Username, NewAccount.Discriminator) != null)
-        //{
-        //    NewAccount.Discriminator = Random.Range(0, 9999).ToString("0000");
+        int rollCount = 0;
+        while (FindAccountByUsernameAndDiscriminator(_Username, NewAccount.Discriminator) != null)
+        {
+            NewAccount.Discriminator = Random.Range(0, 9999).ToString("0000");
 
-        //    rollCount++;
-        //    if(rollCount > 1000)
-        //    {
-        //        Debug.Log("We rolled to many times, suggest a username change!");
-        //        return false;
-        //    }
-        //}
+            rollCount++;
+            if (rollCount > 1000)
+            {
+                Debug.Log("We rolled to many times, suggest a username change!");
+                return false;
+            }
+        }
 
         InsertAsyncAccount(NewAccount);
 
@@ -91,6 +91,49 @@ public class Mongo
     private async void InsertAsyncAccount(Model_Account _Account)
     {
         await accounts.InsertOneAsync(_Account);
+    }
+
+    public Model_Account LoginAccount(string _UsernameOrEmail, string _Password, int _cnnID, string _Token)
+    {
+        Model_Account MyAccount = null;
+        FilterDefinition<Model_Account> filter = null;
+
+
+        if (Utility.IsEmail(_UsernameOrEmail))
+        {
+            filter = Builders<Model_Account>.Filter.Eq("Email", _UsernameOrEmail);
+            filter = (filter & Builders<Model_Account>.Filter.Eq("ShaPassword", _Password));
+            MyAccount = accounts.Find(filter).FirstOrDefault();
+        }
+        else
+        {
+            string[] data = _UsernameOrEmail.Split('#');
+            if (data[1] != null)
+            {
+                filter = Builders<Model_Account>.Filter.Eq("Username", data[0]);
+                filter = (filter & Builders<Model_Account>.Filter.Eq("Discriminator", data[1]));
+                filter = (filter & Builders<Model_Account>.Filter.Eq("ShaPassword", _Password));
+                MyAccount = accounts.Find(filter).FirstOrDefault();
+            } 
+        }
+        if(MyAccount != null)
+        {
+            //Found account, Log in
+            //MyAccount.ActiveConnection = _cnnID;
+            //MyAccount.Token = _Token;
+            //MyAccount.Status = 1;
+            //MyAccount.LastLogin = System.DateTime.Now;
+            var UpdatedAccount = Builders<Model_Account>.Update.Set("ActiveConnection", _cnnID)
+                                                  .Set("Token", _Token)
+                                                  .Set("Status", 1)
+                                                  .Set("LastLogin", System.DateTime.Now);
+            accounts.UpdateOne(filter, UpdatedAccount);
+        }
+        else
+        {
+            //Did not log in
+        }
+        return MyAccount;
     }
     #endregion
 
