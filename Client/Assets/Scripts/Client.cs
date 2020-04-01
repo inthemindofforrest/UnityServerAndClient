@@ -2,25 +2,31 @@
 using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Events;
 
 public class Client : MonoBehaviour
 {
     public static Client Instance;
+    public string Username;
+
+    public UnityEvent OnConnected;
 
     private const int MAX_USER = 100;
     private const int PORT = 26000;
     private const int WEB_PORT = 26001;
     private const int BYTE_SIZE = 1024;//Max Byte Size
 
-    private const string SERVER_IP = "127.0.0.1";
+    private const string SERVER_IP = "127.0.0.1";//"144.202.88.54";
 
 
     private byte ReliableChannel;
     private int ConnectionID;
     private int HostID;
 
-    private bool IsClientStarted;
+    private static bool IsClientStarted;
     private byte error;
+
+    public bool WaitingForResponse;
 
     #region MonoBehaivor
     private void Start()
@@ -42,28 +48,31 @@ public class Client : MonoBehaviour
 
     public void Init()
     {
-        NetworkTransport.Init();
+        if (!IsClientStarted)
+        {
+            NetworkTransport.Init();
 
-        ConnectionConfig cc = new ConnectionConfig();
-        ReliableChannel = cc.AddChannel(QosType.Reliable);
+            ConnectionConfig cc = new ConnectionConfig();
+            ReliableChannel = cc.AddChannel(QosType.Reliable);
 
-        HostTopology Topo = new HostTopology(cc, MAX_USER);
+            HostTopology Topo = new HostTopology(cc, MAX_USER);
 
-        //Client only code
-        HostID = NetworkTransport.AddHost(Topo, 0);
+            //Client only code
+            HostID = NetworkTransport.AddHost(Topo, 0);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         //Web Client
         ConnectionID = NetworkTransport.Connect(HostID, SERVER_IP, WEB_PORT, 0, out error);
         Debug.Log("Connecting from WebGL");
 #else
-        //Standalone Client
-        ConnectionID = NetworkTransport.Connect(HostID, SERVER_IP, PORT, 0, out error);
-        Debug.Log("Connecting from Standalone");
+            //Standalone Client
+            ConnectionID = NetworkTransport.Connect(HostID, SERVER_IP, PORT, 0, out error);
+            Debug.Log("Connecting from Standalone");
 #endif
 
-        Debug.Log(string.Format("Attempting to connect on {0}...", SERVER_IP));
-        IsClientStarted = true;
+            Debug.Log(string.Format("Attempting to connect on {0}...", SERVER_IP));
+            IsClientStarted = true;
+        }
     }
     public void Shutdown()
     {
@@ -95,6 +104,7 @@ public class Client : MonoBehaviour
                 break;
             case NetworkEventType.ConnectEvent:
                 Debug.Log(string.Format("We have connected to the server"));
+                OnConnected.Invoke();
                 break;
             case NetworkEventType.DisconnectEvent:
                 Debug.Log(string.Format("We have been disconnected"));
@@ -112,6 +122,8 @@ public class Client : MonoBehaviour
     #region OnData
     private void OnData(int _CnnID, int _ChannelID, int _RecHostID, NetMsg _Msg)
     {
+        print("MSG back: " + _Msg.OP.ToString());
+        WaitingForResponse = false;
         switch ((NETOP)_Msg.OP)
         {
             case NETOP.None:
@@ -122,6 +134,12 @@ public class Client : MonoBehaviour
                 break;
             case NETOP.OnLoginRequest:
                 OnLoginRequest((Net_OnLoginRequest)_Msg);
+                break;
+            case NETOP.OnGoldRequest:
+                OnGoldRequest((Net_RequestGold)_Msg);
+                break;
+            case NETOP.OnRetrieveCivsRequest:
+                OnRetrieveCivsRequest((Net_RetrieveCivs)_Msg);
                 break;
         }
     }
@@ -134,14 +152,27 @@ public class Client : MonoBehaviour
     private void OnLoginRequest(Net_OnLoginRequest _OLR)
     {
         LobbyScene.Instance.ChangeAuthenticationMessage(_OLR.GetCode());
-        if (_OLR.Success != 0)
+        if (_OLR.Success == 0)
         {
             LobbyScene.Instance.EnableInputs();
         }
         else
         {
             //Successful Login
+            UnityEngine.SceneManagement.SceneManager.LoadScene(1);
+            Username = _OLR.Username;
         }
+    }
+    private void OnGoldRequest(Net_RequestGold _RG)
+    {
+        RequestGold.GoldAmount = _RG.RecievingAmount;
+        RequestGold.UpdateGoldText();
+    }
+    private void OnRetrieveCivsRequest(Net_RetrieveCivs _RC)
+    {
+        Debug.Log(_RC.Civs[0].Focus.ToString());
+        AssignCivs.Instance.AssignAndPlaceAllCivs(_RC.Civs);
+        
     }
     #endregion
 
@@ -157,6 +188,7 @@ public class Client : MonoBehaviour
         Formatter.Serialize(MS, _msg);
 
         NetworkTransport.Send(HostID, ConnectionID, ReliableChannel, buffer, BYTE_SIZE, out error);
+        WaitingForResponse = true;
     }
 
     public void SendCreateAccount(string _Username, string _Password, string _Email)
@@ -214,6 +246,12 @@ public class Client : MonoBehaviour
         LR.Password = Utility.Sha256FromString(_Password);
 
         SendServer(LR);
+    }
+    public void SendLogoutRequest()
+    {
+        Net_LogoutRequest NLG = new Net_LogoutRequest();
+        SaveData.RemoveSavedData();
+        SendServer(NLG);
     }
     #endregion
 }

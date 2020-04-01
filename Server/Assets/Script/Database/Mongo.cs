@@ -12,6 +12,8 @@ public class Mongo
     private IMongoDatabase DB;
 
     private IMongoCollection<Model_Account> accounts;
+    private IMongoCollection<Model_Stats> AccountInfo;
+    private IMongoCollection<Model_Civ_Stats> AccountCivs;
 
     public void Init()
     {
@@ -20,7 +22,9 @@ public class Mongo
 
         //This is where we would initialize collections
         accounts = DB.GetCollection<Model_Account>("account");
-        Debug.Log("Database has been Initilized");
+        AccountInfo = DB.GetCollection<Model_Stats>("AccountStats");
+        AccountCivs = DB.GetCollection<Model_Civ_Stats>("AccountCivs");
+        Console.DeveloperConsole.sLog("Database has been Initilized");
     }
     public void Shutdown()
     {
@@ -41,9 +45,54 @@ public class Mongo
         filter = (filter & Builders<Model_Account>.Filter.Eq("Discriminator", _Discriminator));
         return accounts.Find(filter).FirstOrDefault();
     }
+    public Model_Account FindAccountByConnectionID(int _cnnID)
+    {
+        var filter = Builders<Model_Account>.Filter.Eq("ActiveConnection", _cnnID);
+        return accounts.Find(filter).FirstOrDefault();
+    }
+
+    public Model_Stats FindAccountStatsByConnectionID(int _cnnID)
+    {
+        //return accounts.( Query<Model_Account>.EQ(u => u.Email, _Email);
+        var filter = Builders<Model_Stats>.Filter.Eq("ActiveConnection", _cnnID);
+        return AccountInfo.Find(filter).FirstOrDefault();
+    }
+    public string FindAccountEmailByConnectionID(int _cnnID)
+    {
+        //return accounts.( Query<Model_Account>.EQ(u => u.Email, _Email);
+        var filter = Builders<Model_Account>.Filter.Eq("ActiveConnection", _cnnID);
+        var Account = accounts.Find(filter).FirstOrDefault();
+        return Account.Email;
+    }
+
+    public Model_Civ_Stats FindCivStatsByConnectionID(int _cnnID)
+    {
+        //Gets the email from the logged in account
+        var filter = Builders<Model_Account>.Filter.Eq("ActiveConnection", _cnnID);
+        var Account = accounts.Find(filter).FirstOrDefault();
+        Console.DeveloperConsole.sLog(Account.Email);
+
+        //Gets the Array from the email
+        var filter2 = Builders<Model_Civ_Stats>.Filter.Eq("Email", Account.Email);
+        var itty = AccountCivs.Find(filter2).FirstOrDefault();
+        Console.DeveloperConsole.sLog(itty.Civs.Length.ToString());
+        return itty;
+    }
     #endregion
 
     #region Update
+    public void UpdateAccountAfterDisconnection(string _Email)
+    {
+        var filter = Builders<Model_Account>.Filter.Eq("Email", _Email);
+        var account = accounts.Find(filter).FirstOrDefault();
+
+        var UpdatedAccount = Builders<Model_Account>.Update.Set("ActiveConnection", 0)
+                                                  .Set("Token", (string)null)
+                                                  .Set("Status", 0);
+        accounts.UpdateOne(filter, UpdatedAccount);
+
+        
+    }
     #endregion
 
     #region Insert
@@ -118,11 +167,6 @@ public class Mongo
         }
         if(MyAccount != null)
         {
-            //Found account, Log in
-            //MyAccount.ActiveConnection = _cnnID;
-            //MyAccount.Token = _Token;
-            //MyAccount.Status = 1;
-            //MyAccount.LastLogin = System.DateTime.Now;
             var UpdatedAccount = Builders<Model_Account>.Update.Set("ActiveConnection", _cnnID)
                                                   .Set("Token", _Token)
                                                   .Set("Status", 1)
@@ -135,6 +179,89 @@ public class Mongo
         }
         return MyAccount;
     }
+
+    #region Stats
+    public bool InsertStats(string _Email)
+    {
+        Model_Stats NewStats = new Model_Stats();
+        NewStats.Gold = 0;
+        NewStats.Email = _Email;
+
+        InsertAsyncStats(NewStats);
+
+        return true;
+    }
+    private async void InsertAsyncStats(Model_Stats _Stat)
+    {
+        await AccountInfo.InsertOneAsync(_Stat);
+    }
+    public Model_Stats UpdateStats(string _Email)
+    {
+        Model_Stats MyAccount = null;
+        FilterDefinition<Model_Stats> filter = null;
+
+            filter = Builders<Model_Stats>.Filter.Eq("Email", _Email);
+            MyAccount = AccountInfo.Find(filter).FirstOrDefault();
+
+        if (MyAccount != null)
+        {
+            int NewGold = MyAccount.Gold + Random.Range(2, 20);
+
+            var UpdatedAccount = Builders<Model_Stats>.Update.Set("Gold", NewGold);
+            MyAccount.Gold = NewGold;
+            AccountInfo.UpdateOne(filter, UpdatedAccount);
+        }
+        else
+        {
+            //Did not log in
+        }
+        return MyAccount;
+    }
+    #endregion
+
+    #region Civs
+    public bool InsertCiv(string _Email)
+    {
+        Model_Civ_Stats NewStats = new Model_Civ_Stats();
+        NewStats.Email = _Email;
+        NewStats.Civs = new GameLogic.SerializedCiv[1];
+
+        GameLogic.Civ TempNewCiv = new GameLogic.Civ();
+        TempNewCiv.AssignStarterAtts();
+
+        NewStats.Civs[0] = new GameLogic.SerializedCiv();
+        NewStats.Civs[0] = GameLogic.Civ.CreateSerializedCivFromCiv(TempNewCiv);
+
+        InsertAsyncCiv(NewStats);
+
+        return true;
+    }
+    private async void InsertAsyncCiv(Model_Civ_Stats _Stat)
+    {
+        await AccountCivs.InsertOneAsync(_Stat);
+    }
+    public Model_Civ_Stats UpdateCiv(string _Email)
+    {
+        Model_Civ_Stats MyAccount = null;
+        FilterDefinition<Model_Civ_Stats> filter = null;
+
+        filter = Builders<Model_Civ_Stats>.Filter.Eq("Email", _Email);
+        MyAccount = AccountCivs.Find(filter).FirstOrDefault();
+
+        if (MyAccount != null)
+        {
+            //var UpdatedAccount = Builders<Model_Civ_Stats>.Update.Set("Gold", NewGold);
+            //MyAccount.Gold = NewGold;
+            //AccountInfo.UpdateOne(filter, UpdatedAccount);
+        }
+        else
+        {
+            //Did not log in
+        }
+        return MyAccount;
+    }
+    #endregion
+
     #endregion
 
     #region Delete

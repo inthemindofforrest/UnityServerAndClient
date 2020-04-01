@@ -28,6 +28,11 @@ public class Server : MonoBehaviour
     private void Update()
     {
         UpdateMessagePump();
+
+        if(Input.GetKeyDown(KeyCode.P))
+        {
+            DB.InsertCiv("FakeEmailmadeForMe@Me.com");
+        }
     }
     #endregion
 
@@ -47,7 +52,7 @@ public class Server : MonoBehaviour
         HostID = NetworkTransport.AddHost(Topo, PORT, null);
         WebHostID = NetworkTransport.AddWebsocketHost(Topo, WEB_PORT, null);
 
-        Debug.Log(string.Format("Opening connection on port {0} and webport {1}", PORT, WEB_PORT));
+        Console.DeveloperConsole.sLog(string.Format("Opening connection on port {0} and webport {1}", PORT, WEB_PORT));
         IsServerStarted = true;
     }
     public void Shutdown()
@@ -79,10 +84,11 @@ public class Server : MonoBehaviour
                 OnData(ConnectionID, ChannelID, RecHostID, msg);
                 break;
             case NetworkEventType.ConnectEvent:
-                Debug.Log(string.Format("User {0} has connected through host {1}", ConnectionID, RecHostID));
+                Console.DeveloperConsole.sLog(string.Format("User {0} has connected through host {1}", ConnectionID, RecHostID));
                 break;
             case NetworkEventType.DisconnectEvent:
-                Debug.Log(string.Format("User {0} has disconnected", ConnectionID));
+                DisconnectEvent(RecHostID, ConnectionID);
+                Console.DeveloperConsole.sLog(string.Format("User {0} has disconnected", ConnectionID));
                 break;
             case NetworkEventType.Nothing:
                 //Do nothing, gets called every frame nothing happens
@@ -92,6 +98,24 @@ public class Server : MonoBehaviour
                 Debug.Log("Unexpected network event type");
                 break;
         }
+    }
+
+    private GameLogic.Civ CreateNewCiv()
+    {
+        GameLogic.Civ NewCiv = new GameLogic.Civ();
+
+        NewCiv.AssignAtts();
+
+        return NewCiv;
+    }
+
+    private GameLogic.Civ CreateStarterCiv()
+    {
+        GameLogic.Civ NewCiv = new GameLogic.Civ();
+
+        NewCiv.AssignStarterAtts();
+
+        return NewCiv;
     }
 
     #region OnData
@@ -108,17 +132,39 @@ public class Server : MonoBehaviour
             case NETOP.LoginRequest:
                 LoginRequest(_CnnID, _ChannelID, _RecHostID, (Net_LoginRequest)_Msg);
                 break;
+            case NETOP.OnLogoutRequest:
+                DisconnectEvent(_RecHostID, _CnnID);
+                break;
+            case NETOP.OnGoldRequest:
+                OnGoldRequest(_CnnID, _ChannelID, _RecHostID, (Net_RequestGold)_Msg);
+                break;
+            case NETOP.OnRetrieveCivsRequest:
+                OnRetrieveCivs(_CnnID, _ChannelID, _RecHostID, (Net_RetrieveCivs)_Msg);
+                break;
 
             default:
                 break;
         }
     }
 
+    private void DisconnectEvent(int _recHostID, int _cnnID)
+    {
+        Console.DeveloperConsole.sLog(string.Format("User {0} has Logged out", _cnnID));
+
+        Model_Account account = DB.FindAccountByConnectionID(_cnnID);
+        if(account == null)
+        {
+            return;
+        }
+
+        DB.UpdateAccountAfterDisconnection(account.Email);
+    }
+
     private void CreateAccount(int _CnnID, int _ChannelID, int _RecHostID, Net_CreateAccount _CA)
     {
         Net_OnCreateAccount OCA = new Net_OnCreateAccount();
 
-        if(DB.InsertAccount(_CA.Username, _CA.Password, _CA.Email))
+        if(DB.InsertAccount(_CA.Username, _CA.Password, _CA.Email) && DB.InsertStats(_CA.Email) && DB.InsertCiv(_CA.Email))
         {
             OCA.Success = 1;
         }
@@ -152,6 +198,22 @@ public class Server : MonoBehaviour
         
 
         SendClient(_RecHostID, _CnnID, OLR);
+    }
+
+    private void OnGoldRequest(int _CnnID, int _ChannelID, int _RecHostID, Net_RequestGold _RG)
+    {
+        Net_RequestGold NewRG = new Net_RequestGold();
+        NewRG.RecievingAmount = DB.UpdateStats(DB.FindAccountEmailByConnectionID(_CnnID)).Gold;
+        SendClient(_RecHostID, _CnnID, NewRG);
+    }
+
+    private void OnRetrieveCivs(int _CnnID, int _ChannelID, int _RecHostID, Net_RetrieveCivs _RC)
+    {
+        Net_RetrieveCivs NewRG = new Net_RetrieveCivs();
+        GameLogic.SerializedCiv[] T = DB.FindCivStatsByConnectionID(_CnnID).Civs;
+        NewRG.Civs = T;
+        Console.DeveloperConsole.sLog("Num: " + T[0].Focus.ToString());
+        SendClient(_RecHostID, _CnnID, NewRG);
     }
     #endregion
 

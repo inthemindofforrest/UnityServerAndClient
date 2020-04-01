@@ -17,3 +17,19 @@ public class Model_Account
     public DateTime LastLogin { set; get; }
 }
 
+public class Model_Stats
+{
+    public ObjectId _id;
+
+    public string Email { set; get; }
+
+    public int Gold { set; get; }
+}
+public class Model_Civ_Stats
+{
+    public ObjectId _id;
+
+    public string Email { set; get; }
+
+    public GameLogic.SerializedCiv[] Civs;
+}

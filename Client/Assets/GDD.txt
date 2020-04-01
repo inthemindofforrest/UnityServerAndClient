@@ -1,0 +1,24 @@
+***Civilian***
+
+Name
+
+Attributes
+1-Focus-FC
+2-Strength-ST
+3-Stamina-SM
+4-Agility-AG
+5-Charisma-CH
+6-Intellegence-IN
+
+***END***
+
+***characterMenu***
+
+Tabs
+-Inventory
+-Civ Selection
+-Settings
+
+***END***
+
+*******************************************CREATE A NEW CELL GRID LAYOUT BY SCRIPT!!!!!!****************************************

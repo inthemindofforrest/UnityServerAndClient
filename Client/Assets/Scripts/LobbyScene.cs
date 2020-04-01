@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class LobbyScene : MonoBehaviour
 {
+    Client MainClient;
+
     [SerializeField] CanvasGroup CG;
     [SerializeField] TMPro.TextMeshProUGUI WelcomeMessage;
     [SerializeField] TMPro.TextMeshProUGUI AuthenticationMessage;
@@ -15,6 +17,7 @@ public class LobbyScene : MonoBehaviour
             Instance = this;
         else
             Destroy(gameObject);
+        MainClient = Client.Instance;
     }
 
     public void OnClickCreateAccount()
@@ -97,5 +100,11 @@ public class LobbyScene : MonoBehaviour
         {
             Debug.LogError("Cannot locate Fields");
         }
+    }
+
+    public void Logout()
+    {
+        MainClient.SendLogoutRequest();
+        UnityEngine.SceneManagement.SceneManager.LoadScene(0);
     }
 }
